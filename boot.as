@@ -453,5 +453,3 @@ err_msg db '-', 0x0D, 0x0A, 0
 
 buffer equ 0x8000   
 
-times 510-($-$$) db 0
-dw 0xAA55
