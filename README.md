@@ -56,3 +56,15 @@ Computer replies
 
 · + — success
 · - — error
+
+Key Action
+d read sector from disk into buffer
+w write buffer to disk sector
+t show 512 bytes from buffer in hex
+b load sector to 0x1000:0x0000 and jump
+f scan disk, print non-empty sectors (C/H/S)
+m write 1 byte to memory
+l load sector into buffer (unreliable)
+p scan memory for non-zero bytes (may hang)
+s load sector and run (unreliable)
+q power off (ACPI)
