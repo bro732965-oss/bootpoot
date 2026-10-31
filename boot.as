@@ -2,70 +2,29 @@ org 0x7C00
 bits 16
 
 run_os:
-    mov ah, 0x00
-    mov al, 0x03
+    mov ax, 0x0003
     int 0x10
 
     mov si, msg
     call print_string
 
 input1:
-    mov ah, 0x00
-    int 0x16
+    call read_char
     mov [cur], al
-    mov ah, 0x0E
-    int 0x10
-    jmp input2
-
-input2:
-    mov ah, 0x00
-    int 0x16
+    call read_char
     mov [cur1], al
-    mov ah, 0x0E
-    int 0x10
-    jmp input_num
-
-input_num:
-    mov ah, 0x00
-    int 0x16
+    call read_char
     mov [sim], al
-    mov ah, 0x0E
-    int 0x10
-    jmp input_num2
+    
+    mov cx, 4
+.read_params:
+    push cx
+    call read_char
+    pop cx
+    loop .read_params
 
-input_num2:
-    mov ah, 0x00
-    int 0x16
-    mov [sim1], al
-    mov ah, 0x0E
-    int 0x10
-
-    mov ah, 0x00
-    int 0x16
-    mov [sim2], al
-    mov ah, 0x0E
-    int 0x10
-
-    mov ah, 0x00
-    int 0x16
-    mov [sim3], al
-    mov ah, 0x0E
-    int 0x10
-
-    mov ah, 0x00
-    int 0x16
-    mov [sim4], al
-    mov ah, 0x0E
-    int 0x10
-
-    mov al, 0x0D
-    mov ah, 0x0E
-    int 0x10
-    mov al, 0x0A
-    mov ah, 0x0E
-    int 0x10
-
-    jmp crt_tbl
+    mov si, newline
+    call print_string
 
 crt_tbl:
     cmp byte [cur], 'd'
@@ -78,10 +37,8 @@ crt_tbl:
     je bin
     cmp byte [cur], 'f'
     je dir
-    cmp byte [cur] , 'w'
+    cmp byte [cur], 'w'
     je write_disk
-
-
     cmp byte [cur], 'm'
     je ozy
     cmp byte [cur], 'l'
@@ -91,27 +48,38 @@ crt_tbl:
     cmp byte [cur], 's'
     je bin1
     jmp error
+
+read_char:
+    mov ah, 0x00
+    int 0x16
+    mov ah, 0x0E
+    int 0x10
+    ret
+
 read_ozy:
- mov ah, 0x02        
- mov ax, [sim2]
- mov es, ax
- mov bx, [sim1]
- mov bx, buffer       
- mov ax, 0x0000
- mov es, ax           
- int 0x13             
- mov si, ok_msg
- call print_string
- jmp input1
+    mov ah, 0x02        
+    mov al, [sim2]
+    mov es, ax
+    mov bx, buffer       
+    mov ax, 0x0000
+    mov es, ax           
+    int 0x13             
+    jc error
+    mov si, ok_msg
+    call print_string
+    jmp input1
+
 ozy:
- mov ax, [sim2]
- mov es, ax
- mov bx, [sim1]
- mov al, [sim]
- mov [es:bx], al
- mov si, ok_msg
- call print_string
- jmp input1
+    mov al, [sim2]
+    mov ah, [sim2+1]
+    mov es, ax
+    mov bx, buffer
+    mov al, [sim]
+    mov [es:bx], al
+    mov si, ok_msg
+    call print_string
+    jmp input1
+
 disk:
     mov ah, 0x02
     mov al, [sim4]
@@ -129,10 +97,10 @@ disk:
     mov es, ax
     int 0x13
     jc error
-
     mov si, ok_msg
     call print_string
     jmp input1
+
 write_disk:
     mov ah, 0x03       
     mov al, [sim4]
@@ -153,6 +121,7 @@ write_disk:
     mov si, ok_msg
     call print_string
     jmp input1
+
 scan_mem:
     cli
     xor ax, ax
@@ -186,7 +155,7 @@ scan_mem:
     cmp word [scan_line], 20
     jl .skip
     mov word [scan_line], 0
-    call wait_key
+    call read_char
 
     mov ax, [scan_seg]
     mov es, ax
@@ -207,28 +176,18 @@ scan_mem:
     call print_string
     jmp input1
 
-wait_key:
-    mov ah, 0x00
-    int 0x16
-    ret
-
 print_addr:
     mov ax, es
-    call print_hex_word
+    call print_hex
     mov al, ':'
-    mov ah, 0x0E
-    int 0x10
+    call print_char
     mov ax, bx
-    call print_hex_word
-    mov al, 0x0D
-    mov ah, 0x0E
-    int 0x10
-    mov al, 0x0A
-    mov ah, 0x0E
-    int 0x10
+    call print_hex
+    mov si, newline
+    call print_string
     ret
 
-print_hex_word:
+print_hex:
     push ax
     mov al, ah
     call print_hex_byte
@@ -253,6 +212,10 @@ print_hex_nibble:
 .digit:
     add al, '0'
 .out:
+    call print_char
+    ret
+
+print_char:
     mov ah, 0x0E
     int 0x10
     ret
@@ -261,6 +224,7 @@ scan_seg  dw 0
 scan_line dw 0
 
 done_msg db ' done', 0x0D, 0x0A, 0
+
 text:
     mov si, buffer
     mov cx, 512
@@ -269,23 +233,18 @@ hex_loop:
     lodsb
     push ax
     shr al, 4
-    call print_hex
+    call print_hex_nibble
     pop ax
     and al, 0x0F
-    call print_hex
+    call print_hex_nibble
     mov al, ' '
-    mov ah, 0x0E
-    int 0x10
+    call print_char
     inc bx
     cmp bx, 16
     jne hex_next
     xor bx, bx
-    mov al, 0x0D
-    mov ah, 0x0E
-    int 0x10
-    mov al, 0x0A
-    mov ah, 0x0E
-    int 0x10
+    mov si, newline
+    call print_string
 hex_next:
     loop hex_loop
     jmp input1
@@ -295,22 +254,16 @@ qei:
     xor bx, bx         
     int 0x15       
     jc .error_shutdown 
-
-
     mov ax, 0x530E   
     xor bx, bx      
     mov cx, 0x0102 
     int 0x15          
     jc .error_shutdown
-
-
     mov ax, 0x5307      
     mov bx, 0x0001      
     mov cx, 0x0003      
     int 0x15           
-
 .error_shutdown:
-   
     cli               
 .hang_loop:
     hlt              
@@ -342,7 +295,6 @@ bin:
     sub dl, '0'
     int 0x13
     jc error
-
     jmp 0x1000:0x0000
 
 error:
@@ -354,22 +306,9 @@ print_string:
     lodsb
     or al, al
     jz .done
-    mov ah, 0x0E
-    int 0x10
+    call print_char
     jmp print_string
 .done:
-    ret
-
-print_hex:
-    cmp al, 10
-    jl .digit
-    add al, 'A' - 10
-    jmp .out
-.digit:
-    add al, '0'
-.out:
-    mov ah, 0x0E
-    int 0x10
     ret
 
 dir:
@@ -401,13 +340,10 @@ dir:
 
 .scan_start:
     mov ch, 0
-
 cyl_loop:
     mov dh, 0
-
 head_loop:
     mov cl, 1
-
 sect_loop:
     push cx
     push dx
@@ -429,6 +365,7 @@ check_empty:
     jnz data_found
     loop check_empty
     jmp next_sector
+
 bin1:
     cli
     xor ax, ax
@@ -443,84 +380,57 @@ bin1:
     xor bx, bx
 
     mov ah, 0x02
-    mov ax, [sim2]
+    mov al, [sim2]
+    mov ah, [sim2+1]
     mov es, ax
-    mov bx, [sim1]
+    mov al, [sim1]
+    mov ah, [sim1+1]
+    mov bx, ax
     int 0x13
     jc error
+
 data_found:
     pop dx
     pop cx
     push cx
     push dx
 
-    mov ah, 0x0E
     mov al, 'C'
-    int 0x10
-    mov al, ch
-    call print_dec
-
+    call print_char
+    mov ax, cx
+    call print_hex_word
     mov al, 'H'
-    int 0x10
-    mov al, dh
-    call print_dec
-
+    call print_char
+    mov ax, dx
+    call print_hex_word
     mov al, 'S'
-    int 0x10
-    mov al, cl
-    call print_dec
-
-    mov al, 0x0D
-    int 0x10
-    mov al, 0x0A
-    int 0x10
+    call print_char
+    mov ax, cx
+    call print_hex_byte
+    mov si, newline
+    call print_string
 
 next_sector:
     pop dx
     pop cx
-
     inc cl
     cmp cl, [max_sect]
     jle sect_loop
-
     inc dh
     cmp dh, [max_head]
     jle head_loop
-
     inc ch
     cmp ch, [max_cyl]
     jle cyl_loop
-
 hang:
     jmp hang
 
-print_dec:
+print_hex_word:
     push ax
-    push bx
-    push cx
-    push dx
-
-    mov bl, 10
-    xor cx, cx
-.div:
-    xor dx, dx
-    div bl
-    push dx
-    inc cx
-    test ax, ax
-    jnz .div
-.print:
-    pop dx
-    add dl, '0'
-    mov al, dl
-    mov ah, 0x0E
-    int 0x10
-    loop .print
-
-    pop dx
-    pop cx
-    pop bx
+    mov al, ah
+    call print_hex_byte
     pop ax
+    call print_hex_byte
     ret
 
 boot_drive db 0
@@ -537,6 +447,7 @@ sim3    db 0
 sim4    db 0
 
 msg     db '=', 0
+newline db 0x0D, 0x0A, 0
 ok_msg  db '+', 0x0D, 0x0A, 0
 err_msg db '-', 0x0D, 0x0A, 0
 
