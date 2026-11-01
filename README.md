@@ -3,13 +3,14 @@ teapotOS — Documentation
 Build
 
 ```bash
-nasm -f bin teapotOS.asm -o teapotOS.bin
+qemu-system-x86_64 -drive file=/sdcard/Download/batwat/os.img,format=raw,if=floppy,snapshot=on -boot a -vnc :1
 ```
 
 Run in emulator
 
+
 ```bash
-qemu-system-i386 -fda teapotOS.bin
+dd if=/путь/к/os.img of=/dev/fd0 bs=1024 conv=sync
 ```
 
 Run on real hardware
