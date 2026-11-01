@@ -78,13 +78,13 @@ draw_screen:
 wait_input:
     mov ah, 0x00
     int 0x16
-    cmp al, 0x1B   ; Esc - меню
+    cmp al, 0x1B
     je show_menu
-    cmp al, 0x0D   ; Enter - открыть
+    cmp al, 0x0D
     je open_file
-    cmp ah, 0x48   ; Стрелка вверх
+    cmp ah, 0x48
     je move_up
-    cmp ah, 0x50   ; Стрелка вниз
+    cmp ah, 0x50
     je move_down
     jmp wait_input
 
@@ -185,10 +185,35 @@ create_file:
     jmp draw_screen
 
 edit_file:
-    mov si, edit_prompt
+    mov ax, 0x0600
+    mov bh, 0x07
+    mov cx, 0
+    mov dx, 0x184F
+    int 0x10
+
+    mov si, edit_prompt_name
     call print_string
-    mov di, file_content
-    mov cx, 32
+
+    mov di, edit_filename
+    mov cx, 8
+.read_name:
+    mov ah, 0x00
+    int 0x16
+    mov ah, 0x0E
+    int 0x10
+    mov [di], al
+    inc di
+    loop .read_name
+    mov byte [di], 0
+
+    mov si, nl
+    call print_string
+    mov si, edit_prompt_text
+    call print_string
+
+    mov di, 0x9000
+    xor cx, cx
+
 .read_text:
     mov ah, 0x00
     int 0x16
@@ -196,8 +221,37 @@ edit_file:
     int 0x10
     mov [di], al
     inc di
-    loop .read_text
+    inc cx
+
+    cmp al, 0x0D
+    jne .skip_check
+    inc byte [enter_count]
+    
+    cmp byte [enter_count], 4
+    je .done_edit
+    
+    cmp byte [enter_count], 1
+    jne .skip_check
+    mov al, 0x0A
+    mov ah, 0x0E
+    int 0x10
+
+.skip_check:
+    cmp al, 0x0D
+    je .reset_check
+    mov byte [enter_count], 0
+.reset_check:
+    jmp .read_text
+
+.done_edit:
     mov byte [di], 0
+    mov si, nl
+    call print_string
+    mov si, ok_msg
+    call print_string
+    
+    mov ah, 0x00
+    int 0x16
     jmp draw_screen
 
 load_console:
@@ -225,21 +279,17 @@ load_console:
 shutdown:
     mov si, shut_msg
     call print_string
-    
     mov ax, 0x5301
     xor bx, bx
     int 0x15
-    
     mov ax, 0x530E
     xor bx, bx
     mov cx, 0x0102
     int 0x15
-    
     mov ax, 0x5307
     mov bx, 0x0001
     mov cx, 0x0003
     int 0x15
-    
     cli
 .halt:
     hlt
@@ -263,10 +313,13 @@ print_string:
 
 file_count dw 0
 cursor_pos dw 0
+enter_count db 0
+
 file_table:
     dw 0
     times 512-2 db 0
-file_content db 0
+
+edit_filename db 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 header db 'teapot', 0x0D, 0x0A, 0
 no_files_msg db 'No files found. Press Esc to create.', 0x0D, 0x0A, 0
@@ -278,7 +331,11 @@ menu_item4 db '4. Edit File (text)', 0
 menu_item5 db '5. Shutdown PC', 0
 bin_msg db 'Loading...', 0x0D, 0x0A, 0
 create_prompt db 0x0D, 0x0A, 'Name (8 chars): ', 0
-edit_prompt db 0x0D, 0x0A, 'Enter text (32 chars): ', 0
 console_msg db 'Loading console.img...', 0x0D, 0x0A, 0
 shut_msg db 0x0D, 0x0A, 'Shutting down...', 0x0D, 0x0A, 0
 err_msg db 0x0D, 0x0A, 'Disk Error!', 0x0D, 0x0A, 0
+
+edit_prompt_name db 0x0D, 0x0A, 'File name (8 chars): ', 0
+edit_prompt_text db 0x0D, 0x0A, 'Enter text (4x Enter to save): ', 0
+ok_msg db 0x0D, 0x0A, '[Text Saved to RAM]', 0x0D, 0x0A, 0
+nl db 0x0D, 0x0A, 0
