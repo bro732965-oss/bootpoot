@@ -4,6 +4,7 @@ bits 16
 start:
     mov ax, 0x0003
     int 0x10
+    
     mov dl, 0
     mov ah, 0x02
     mov al, 1
@@ -13,11 +14,14 @@ start:
     mov bx, file_table
     int 0x13
     jc .disk_err
+
     mov ax, [file_table]
     mov [file_count], ax
     jmp main_loop
+
 .disk_err:
     mov word [file_count], 0
+
 main_loop:
     call draw_screen
     call wait_input
@@ -29,15 +33,17 @@ draw_screen:
     mov cx, 0x0100
     mov dx, 0x184F
     int 0x10
+
     mov dh, 1
     mov dl, 2
     call set_cursor
     mov si, header
     call print_string
-    
+
     mov cx, [file_count]
     cmp cx, 0
     je .no_files
+
     mov bx, file_table + 2
     mov di, 0
 .print_loop:
@@ -47,19 +53,37 @@ draw_screen:
     add dh, al
     mov dl, 2
     call set_cursor
+    
+    ; Подсветка выбранного файла (меняем цвет на белый фон)
+    cmp di, [cursor_pos]
+    jne .no_highlight
+    mov ax, 0x7020    ; Атрибут: белый на сером (или другом цвете)
+    ; Для простоты мы просто ставим пробел перед именем, чтобы выделить
+    mov ah, 0x0E
+    mov al, '>'
+    int 0x10
+    jmp .print_name
+.no_highlight:
+    mov ah, 0x0E
+    mov al, ' '
+    int 0x10
+.print_name:
     mov si, bx
     call print_string
+    
     add bx, 32
     inc di
     pop cx
     loop .print_loop
     jmp .done
+
 .no_files:
     mov dh, 3
     mov dl, 2
     call set_cursor
     mov si, no_files_msg
     call print_string
+
 .done:
     mov dh, 22
     mov dl, 0
@@ -73,7 +97,80 @@ wait_input:
     int 0x16
     cmp al, 0x1B
     je show_menu
+    cmp al, 0x0D
+    je open_selected_file
+    cmp ah, 0x48
+    je move_up
+    cmp ah, 0x50
+    je move_down
     jmp wait_input
+
+move_up:
+    cmp word [cursor_pos], 0
+    je wait_input
+    dec word [cursor_pos]
+    jmp wait_input
+
+move_down:
+    mov ax, [file_count]
+    dec ax
+    cmp [cursor_pos], ax
+    jge wait_input
+    inc word [cursor_pos]
+    jmp wait_input
+
+; --- ОТКРЫТИЕ ВЫБРАННОГО ФАЙЛА (ENTER) ---
+open_selected_file:
+    mov ax, [cursor_pos]
+    mov bx, 32
+    mul bx
+    mov si, file_table + 2
+    add si, ax
+    
+    ; Проверяем расширение (ищем точку)
+    ; Для простоты просто проверяем последние 3 символа
+    ; (В реальности нужно искать точку в строке)
+    add si, 8 ; Сдвигаем к концу имени
+    cmp byte [si], '.'
+    jne .unknown
+    
+    ; Проверяем BIN
+    cmp byte [si+1], 'B'
+    je .is_bin
+    ; Проверяем TXT
+    cmp byte [si+1], 'T'
+    je .is_txt
+    ; Проверяем IMG
+    cmp byte [si+1], 'I'
+    je .is_img
+    
+.unknown:
+    mov si, msg_unknown
+    call print_string
+    mov ah, 0x00
+    int 0x16
+    jmp draw_screen
+
+.is_bin:
+    mov si, msg_run_bin
+    call print_string
+    jmp 0x1000:0x0000 ; Запуск бинарника
+
+.is_txt:
+    mov si, msg_open_txt
+    call print_string
+    ; Здесь должен быть код чтения текста
+    mov ah, 0x00
+    int 0x16
+    jmp draw_screen
+
+.is_img:
+    mov si, msg_open_img
+    call print_string
+    ; Здесь должен быть код вывода картинки
+    mov ah, 0x00
+    int 0x16
+    jmp draw_screen
 
 show_menu:
     mov ax, 0x0600
@@ -258,13 +355,13 @@ read_file:
     mov ax, bx
     mov bx, 256
     mul bx
-    mov si, ax
-    add si, 0x9000
+    add ax, 0x9000
     
+    mov si, ax
+    push si
     mov si, prompt_read
     call print_string
-    mov si, ax
-    add si, 0x9000
+    pop si
     call print_string
     jmp .end
 .not_found:
@@ -465,9 +562,9 @@ file_table:
     dw 0
     times 512-2 db 0
 
-header db 'teapoot 16-bit BIOS', 0x0D, 0x0A, 0
+header db '--- teapoot 16 bit BIOS ---', 0x0D, 0x0A, 0
 no_files_msg db 'No files found. Press Esc for menu.', 0x0D, 0x0A, 0
-footer db 'Esc: Menu', 0
+footer db 'Arrows: Move | Enter: Open | Esc: Menu', 0
 
 menu_item1 db '1. Create File', 0
 menu_item2 db '2. Write to File', 0
@@ -487,6 +584,11 @@ msg_created db 0x0D, 0x0A, 'File Created! Press any key...', 0
 msg_saved db 0x0D, 0x0A, 'Text Saved! Press any key...', 0
 msg_notfound db 0x0D, 0x0A, 'File not found!', 0
 msg_press db 0x0D, 0x0A, 'Press any key...', 0
+msg_run_bin db 0x0D, 0x0A, 'Executing binary...', 0
+msg_open_txt db 0x0D, 0x0A, 'Opening text file...', 0
+msg_open_img db 0x0D, 0x0A, 'Opening image (not implemented)...', 0
+msg_unknown db 0x0D, 0x0A, 'Unknown file type!', 0
+
 console_msg db 'Loading console.img...', 0x0D, 0x0A, 0
 shut_msg db 0x0D, 0x0A, 'Shutting down...', 0x0D, 0x0A, 0
 err_msg db 0x0D, 0x0A, 'Disk Error!', 0x0D, 0x0A, 0
