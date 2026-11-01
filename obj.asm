@@ -43,7 +43,8 @@ draw_screen:
 .print_loop:
     push cx
     mov dh, 3
-    add dh, di
+    mov ax, di
+    add dh, al
     mov dl, 2
     call set_cursor
     mov si, bx
