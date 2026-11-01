@@ -47,8 +47,12 @@ crt_tbl:
     je scan_mem
     cmp byte [cur], 's'
     je bin1
+    cmp byte [cur], 'x'
+    je kill_console
     jmp error
-
+    
+kill_console:
+    jmp 0x7E00:0x0000
 read_char:
     mov ah, 0x00
     int 0x16
