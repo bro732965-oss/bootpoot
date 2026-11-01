@@ -52,15 +52,22 @@ crt_tbl:
     jmp error
     
 kill_console:
-exit_to_menu:
-    cli               
-    xor ax, ax       
-    mov ds, ax        
-    mov es, ax      
-    mov ss, ax        
-    mov sp, 0x7C00    
-    sti               
-    jmp 0x0000:0x7E00 
+
+    cli
+.wait:
+    mov al, 0x02
+    out 0x64, al     
+    in al, 0x64
+    test al, 0x02   
+    jnz .wait
+
+    
+    mov al, 0xFE
+    out 0x64, al
+
+    
+    hlt
+    jmp error 
 read_char:
     mov ah, 0x00
     int 0x16
