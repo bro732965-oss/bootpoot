@@ -398,7 +398,7 @@ file_table:
     dw 0
     times 512-2 db 0
 
-header db 'teapoot', 0x0D, 0x0A, 0
+header db '--- MyOS File Manager ---', 0x0D, 0x0A, 0
 no_files_msg db 'No files found. Press Esc to create.', 0x0D, 0x0A, 0
 footer db 'Arrows: Move | Enter: Open | 1: File Menu | Esc: Main Menu', 0
 
