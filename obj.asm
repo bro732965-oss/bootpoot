@@ -5,7 +5,6 @@ start:
     mov ax, 0x0003
     int 0x10
     
-    ; Загружаем таблицу файлов с дискеты (10-й сектор)
     mov dl, 0
     mov ah, 0x02
     mov al, 1
@@ -53,11 +52,8 @@ draw_screen:
     add dh, [cursor_pos]
     mov dl, 2
     call set_cursor
-    
-    ; Выделяем выбранный файл (если нужно, можно добавить цвет)
     mov si, bx
     call print_string
-    
     add bx, 16
     inc di
     pop cx
@@ -82,13 +78,13 @@ draw_screen:
 wait_input:
     mov ah, 0x00
     int 0x16
-    
-    cmp al, '1'       ; Нажата кнопка 1 - меню действий
-    je file_actions_menu
-    
-    cmp ah, 0x48      ; Стрелка вверх
+    cmp al, 0x1B     ; Esc - старое меню
+    je show_main_menu
+    cmp al, '1'      ; Кнопка 1 - меню действий с файлом
+    je show_file_menu
+    cmp ah, 0x48
     je move_up
-    cmp ah, 0x50      ; Стрелка вниз
+    cmp ah, 0x50
     je move_down
     jmp wait_input
 
@@ -106,8 +102,47 @@ move_down:
     inc word [cursor_pos]
     jmp wait_input
 
-; --- МЕНЮ ДЕЙСТВИЙ С ФАЙЛОМ (Вызывается по кнопке '1') ---
-file_actions_menu:
+; --- МЕНЮ ДЕЙСТВИЙ С ВЫБРАННЫМ ФАЙЛОМ (вызывается по кнопке '1') ---
+show_file_menu:
+    mov ax, 0x0600
+    mov bh, 0x70
+    mov cx, 0x0514
+    mov dx, 0x0A32
+    int 0x10
+
+    mov dh, 6
+    mov dl, 22
+    call set_cursor
+    mov si, file_act1
+    call print_string
+
+    mov dh, 7
+    mov dl, 22
+    call set_cursor
+    mov si, file_act2
+    call print_string
+
+    mov dh, 8
+    mov dl, 22
+    call set_cursor
+    mov si, file_act3
+    call print_string
+
+.file_act_wait:
+    mov ah, 0x00
+    int 0x16
+    cmp al, '1'
+    je edit_selected_file
+    cmp al, '2'
+    je read_selected_file
+    cmp al, '3'
+    je delete_selected_file
+    cmp al, 0x1B
+    je draw_screen
+    jmp .file_act_wait
+
+; --- СТАРОЕ МЕНЮ (вызывается по Esc) ---
+show_main_menu:
     mov ax, 0x0600
     mov bh, 0x70
     mov cx, 0x0514
@@ -117,49 +152,51 @@ file_actions_menu:
     mov dh, 5
     mov dl, 22
     call set_cursor
-    mov si, act_menu1
+    mov si, menu_item1
     call print_string
 
     mov dh, 6
     mov dl, 22
     call set_cursor
-    mov si, act_menu2
+    mov si, menu_item2
     call print_string
 
     mov dh, 7
     mov dl, 22
     call set_cursor
-    mov si, act_menu3
+    mov si, menu_item3
     call print_string
 
     mov dh, 8
     mov dl, 22
     call set_cursor
-    mov si, act_menu4
+    mov si, menu_item4
     call print_string
 
-.act_wait:
+    mov dh, 9
+    mov dl, 22
+    call set_cursor
+    mov si, menu_item5
+    call print_string
+
+.menu_wait:
     mov ah, 0x00
     int 0x16
-    cmp al, '1'      ; Создать файл
-    je create_new_file
-    cmp al, '2'      ; Редактировать выбранный
-    je edit_selected_file
-    cmp al, '3'      ; Прочитать выбранный
-    je read_selected_file
-    cmp al, 0x1B     ; Esc - назад
+    cmp al, '1'
+    je create_file
+    cmp al, '2'
+    je load_console
+    cmp al, '4'
+    je edit_new_file
+    cmp al, '5'
+    je shutdown
+    cmp al, 0x1B
     je draw_screen
-    jmp .act_wait
+    jmp .menu_wait
 
-; --- 1. СОЗДАТЬ НОВЫЙ ФАЙЛ ---
-create_new_file:
-    mov ax, 0x0600
-    mov bh, 0x07
-    mov cx, 0
-    mov dx, 0x184F
-    int 0x10
-
-    mov si, prompt_name
+; --- ФУНКЦИИ СТАРОГО МЕНЮ ---
+create_file:
+    mov si, create_prompt
     call print_string
     mov ax, [file_count]
     mov bx, 16
@@ -176,30 +213,98 @@ create_new_file:
     inc di
     loop .read_name
     mov byte [di], 0
-    
     inc word [file_count]
     mov ax, [file_count]
     mov [file_table], ax
+    jmp draw_screen
+
+edit_new_file:
+    mov ax, 0x0600
+    mov bh, 0x07
+    mov cx, 0
+    mov dx, 0x184F
+    int 0x10
+    mov si, prompt_edit
+    call print_string
     
-    mov si, msg_created
+    mov di, 0x9000
+    xor cx, cx
+.read_text:
+    mov ah, 0x00
+    int 0x16
+    mov ah, 0x0E
+    int 0x10
+    mov [di], al
+    inc di
+    inc cx
+    cmp al, 0x0D
+    jne .reset
+    inc byte [enter_count]
+    cmp byte [enter_count], 4
+    je .done
+    jmp .read_text
+.reset:
+    mov byte [enter_count], 0
+    jmp .read_text
+.done:
+    mov byte [di], 0
+    mov si, msg_saved
     call print_string
     mov ah, 0x00
     int 0x16
     jmp draw_screen
 
-; --- 2. РЕДАКТИРОВАТЬ ФАЙЛ ---
+load_console:
+    mov si, console_msg
+    call print_string
+    mov ax, 0x1000
+    mov es, ax
+    xor bx, bx
+    mov ah, 0x02
+    mov al, 64
+    mov ch, 0
+    mov cl, 20
+    mov dh, 0
+    mov dl, 0
+    int 0x13
+    jc .err
+    jmp 0x1000:0x0000
+.err:
+    mov si, err_msg
+    call print_string
+    mov ah, 0x00
+    int 0x16
+    jmp draw_screen
+
+shutdown:
+    mov si, shut_msg
+    call print_string
+    mov ax, 0x5301
+    xor bx, bx
+    int 0x15
+    mov ax, 0x530E
+    xor bx, bx
+    mov cx, 0x0102
+    int 0x15
+    mov ax, 0x5307
+    mov bx, 0x0001
+    mov cx, 0x0003
+    int 0x15
+    cli
+.halt:
+    hlt
+    jmp .halt
+
+; --- ФУНКЦИИ МЕНЮ ДЕЙСТВИЙ ---
 edit_selected_file:
     mov ax, 0x0600
     mov bh, 0x07
     mov cx, 0
     mov dx, 0x184F
     int 0x10
-
-    mov si, prompt_edit
+    mov si, prompt_edit_sel
     call print_string
     
-    ; Вычисляем адрес памяти для текста выбранного файла
-    ; Например: 0x9000 + (cursor_pos * 256)
     mov ax, [cursor_pos]
     mov bx, 256
     mul bx
@@ -215,20 +320,16 @@ edit_selected_file:
     mov [di], al
     inc di
     inc cx
-
-    ; Проверка на 4 Enter подряд
     cmp al, 0x0D
-    jne .reset_count
+    jne .reset
     inc byte [enter_count]
     cmp byte [enter_count], 4
-    je .done_edit
+    je .done
     jmp .read_text
-
-.reset_count:
+.reset:
     mov byte [enter_count], 0
     jmp .read_text
-
-.done_edit:
+.done:
     mov byte [di], 0
     mov si, msg_saved
     call print_string
@@ -236,18 +337,15 @@ edit_selected_file:
     int 0x16
     jmp draw_screen
 
-; --- 3. ПРОЧИТАТЬ ФАЙЛ ---
 read_selected_file:
     mov ax, 0x0600
     mov bh, 0x07
     mov cx, 0
     mov dx, 0x184F
     int 0x10
-
     mov si, prompt_read
     call print_string
-
-    ; Вычисляем адрес памяти
+    
     mov ax, [cursor_pos]
     mov bx, 256
     mul bx
@@ -257,8 +355,20 @@ read_selected_file:
     call print_string
     mov si, nl
     call print_string
-    
     mov si, msg_press_key
+    call print_string
+    mov ah, 0x00
+    int 0x16
+    jmp draw_screen
+
+delete_selected_file:
+    mov ax, [cursor_pos]
+    mov bx, 16
+    mul bx
+    mov di, file_table + 2
+    add di, ax
+    mov byte [di], 0
+    mov si, msg_deleted
     call print_string
     mov ah, 0x00
     int 0x16
@@ -289,19 +399,28 @@ file_table:
     times 512-2 db 0
 
 header db 'teapoot', 0x0D, 0x0A, 0
-no_files_msg db 'No files found. Press 1 to open Actions.', 0x0D, 0x0A, 0
-footer db 'Arrows: Move | 1: Actions Menu', 0
+no_files_msg db 'No files found. Press Esc to create.', 0x0D, 0x0A, 0
+footer db 'Arrows: Move | Enter: Open | 1: File Menu | Esc: Main Menu', 0
 
-act_menu1 db '1. Create New File', 0
-act_menu2 db '2. Edit Selected File', 0
-act_menu3 db '3. Read Selected File', 0
-act_menu4 db 'Esc - Back', 0
+menu_item1 db '1. Create File', 0
+menu_item2 db '2. Console (16-bit)', 0
+menu_item3 db '3. Save & Exit', 0
+menu_item4 db '4. Edit File (text)', 0
+menu_item5 db '5. Shutdown PC', 0
 
-prompt_name db 0x0D, 0x0A, 'Enter file name (8 chars): ', 0
+file_act1 db '1. Edit Selected File', 0
+file_act2 db '2. Read Selected File', 0
+file_act3 db '3. Delete Selected File', 0
+
+create_prompt db 0x0D, 0x0A, 'Name (8 chars): ', 0
 prompt_edit db 0x0D, 0x0A, 'Enter text (4x Enter to save): ', 0
+prompt_edit_sel db 0x0D, 0x0A, 'Edit text (4x Enter to save): ', 0
 prompt_read db 0x0D, 0x0A, '--- File Content ---', 0x0D, 0x0A, 0
 
-msg_created db 0x0D, 0x0A, 'File Created! Press any key...', 0
+console_msg db 'Loading console.img...', 0x0D, 0x0A, 0
+shut_msg db 0x0D, 0x0A, 'Shutting down...', 0x0D, 0x0A, 0
+err_msg db 0x0D, 0x0A, 'Disk Error!', 0x0D, 0x0A, 0
 msg_saved db 0x0D, 0x0A, 'Text Saved! Press any key...', 0
 msg_press_key db 0x0D, 0x0A, 'Press any key to return...', 0
+msg_deleted db 0x0D, 0x0A, 'File Deleted! Press any key...', 0
 nl db 0x0D, 0x0A, 0
