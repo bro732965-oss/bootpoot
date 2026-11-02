@@ -2,8 +2,15 @@ org 0x7E00
 bits 16
 
 start:
+    mov ax, 0x0000
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov sp, 0x9000
+
     mov ax, 0x0003
     int 0x10
+    
     mov dl, 0
     mov ah, 0x02
     mov al, 1
@@ -12,11 +19,13 @@ start:
     mov dh, 0
     mov bx, file_table
     int 0x13
-    jc .disk_err
+    jc disk_err
+    
     mov ax, [file_table]
     mov [file_count], ax
     jmp main_loop
-.disk_err:
+
+disk_err:
     mov word [file_count], 0
 
 main_loop:
@@ -30,14 +39,17 @@ draw_screen:
     mov cx, 0x0100
     mov dx, 0x184F
     int 0x10
+    
     mov dh, 1
     mov dl, 2
     call set_cursor
     mov si, header
     call print_string
+    
     mov cx, [file_count]
     cmp cx, 0
     je .no_files
+    
     mov bx, file_table + 2
     mov di, 0
 .print_loop:
