@@ -11,7 +11,6 @@ start:
     mov ax, 0x0003
     int 0x10
     
-    ; Читаем таблицу файлов с дискеты (10-й сектор)
     mov dl, 0
     mov ah, 0x02
     mov al, 1
@@ -203,7 +202,6 @@ act_create:
     mov ax, [file_count]
     mov [file_table], ax
     
-    ; СОХРАНЯЕМ ТАБЛИЦУ НА ДИСКЕТУ (10-й сектор)
     mov ah, 0x03
     mov al, 1
     mov ch, 0
@@ -219,16 +217,60 @@ act_create:
     int 0x16
     jmp main_loop
 
-act_read:
-    mov si, txt_read
+act_write:
+    mov ax, 0x0600
+    mov bh, 0x07
+    mov cx, 0
+    mov dx, 0x184F
+    int 0x10
+    mov si, txt_write
+    call print_string
+    
+    mov di, buffer
+    call read_string
+    
+    mov ax, [cursor_pos]
+    add ax, 11
+    
+    mov ah, 0x03
+    mov al, 1
+    mov ch, 0
+    mov cl, al
+    mov dh, 0
+    mov dl, 0x00
+    mov bx, buffer
+    int 0x13
+    
+    mov si, msg_saved
     call print_string
     mov ah, 0x00
     int 0x16
     jmp main_loop
 
-act_write:
-    mov si, txt_write
+act_read:
+    mov ax, 0x0600
+    mov bh, 0x07
+    mov cx, 0
+    mov dx, 0x184F
+    int 0x10
+    
+    mov ax, [cursor_pos]
+    add ax, 11
+    
+    mov ah, 0x02
+    mov al, 1
+    mov ch, 0
+    mov cl, al
+    mov dh, 0
+    mov dl, 0x00
+    mov bx, buffer
+    int 0x13
+    
+    mov si, txt_read
     call print_string
+    mov si, buffer
+    call print_string
+    
     mov ah, 0x00
     int 0x16
     jmp main_loop
@@ -283,12 +325,11 @@ shutdown:
 
 read_string:
     xor cx, cx
-    mov byte [enter_count], 0
 .loop:
     mov ah, 0x00
     int 0x16
     cmp al, 0x0D
-    je .enter
+    je .done
     cmp al, 0x08
     je .backspace
     mov ah, 0x0E
@@ -309,16 +350,6 @@ read_string:
     int 0x10
     mov al, 0x08
     int 0x10
-    jmp .loop
-.enter:
-    mov al, 0x0D
-    mov ah, 0x0E
-    int 0x10
-    mov al, 0x0A
-    int 0x10
-    inc byte [enter_count]
-    cmp byte [enter_count], 4
-    je .done
     jmp .loop
 .done:
     mov byte [di], 0
@@ -342,7 +373,7 @@ print_string:
 
 file_count dw 0
 cursor_pos dw 0
-enter_count db 0
+buffer times 512 db 0
 
 file_table:
     dw 0
@@ -358,12 +389,13 @@ m4 db '4. Delete File', 0
 m5 db '5. Console (16-bit)', 0
 m6 db '6. Shutdown PC', 0
 m7 db 'Esc - Back', 0
-txt_read db 'Reading text... (Press any key)', 0x0D, 0x0A, 0
-txt_write db 'Writing to file... (Press any key)', 0x0D, 0x0A, 0
-txt_create db 'Enter name (4x Enter): ', 0
+txt_read db 'File content: ', 0x0D, 0x0A, 0
+txt_write db 'Enter text (Press Enter to save): ', 0
+txt_create db 'Enter name (Press Enter): ', 0
 txt_delete db 'Deleting file... (Press any key)', 0x0D, 0x0A, 0
 txt_console db 'Loading console.img...', 0x0D, 0x0A, 0
 txt_error db 'Disk read error!', 0x0D, 0x0A, 0
 shut_msg db 0x0D, 0x0A, 'Shutting down...', 0x0D, 0x0A, 0
 msg_created db 0x0D, 0x0A, 'File Created! (Saved to disk)', 0x0D, 0x0A, 0
+msg_saved db 0x0D, 0x0A, 'Text Saved! (Press any key)', 0x0D, 0x0A, 0
 nl db 0x0D, 0x0A, 0
