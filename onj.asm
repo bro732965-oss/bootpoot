@@ -232,6 +232,7 @@ act_write:
     call find_file
     jc .not_found
     
+    ; Вычисляем сектор (11 + номер файла)
     mov ax, bx
     add ax, 11
     mov [file_sector], al
@@ -277,6 +278,7 @@ act_read:
     call find_file
     jc .not_found
     
+    ; Вычисляем сектор (11 + номер файла)
     mov ax, bx
     add ax, 11
     mov [file_sector], al
@@ -417,7 +419,7 @@ act_delete:
 act_console:
     mov si, txt_console
     call print_string
-    mov ax, 0x1000
+    mov ax, 0x8000
     mov es, ax
     xor bx, bx
     mov ah, 0x02
@@ -428,7 +430,7 @@ act_console:
     mov dl, 0
     int 0x13
     jc .err
-    jmp 0x1000:0x0000
+    jmp 0x8000:0x0000
 .err:
     mov si, txt_error
     call print_string
@@ -491,15 +493,15 @@ m5 db '5. Console (16-bit)', 0
 m6 db '6. Shutdown PC', 0
 m7 db 'Esc - Back', 0
 txt_read db 'Content: ', 0x0D, 0x0A, 0
-txt_write db 'Enter text (Enter to save): ', 0
-txt_create db 'Enter name (Enter to save): ', 0
-txt_delete db 'Deleting file... (Press any key)', 0x0D, 0x0A, 0
-txt_console db 'Loading console.img...', 0x0D, 0x0A, 0
+txt_write db 'Enter text: ', 0
+txt_create db 'Enter name: ', 0
+txt_delete db 'Deleting file...', 0x0D, 0x0A, 0
+txt_console db 'Loading console...', 0x0D, 0x0A, 0
 txt_error db 'Disk read error!', 0x0D, 0x0A, 0
 shut_msg db 0x0D, 0x0A, 'Shutting down...', 0x0D, 0x0A, 0
-msg_created db 0x0D, 0x0A, 'File Created! (Saved to disk)', 0x0D, 0x0A, 0
-msg_saved db 0x0D, 0x0A, 'Text Saved! (Press any key)', 0x0D, 0x0A, 0
-msg_deleted db 0x0D, 0x0A, 'File Deleted! (Press any key)', 0x0D, 0x0A, 0
+msg_created db 0x0D, 0x0A, 'File Created!', 0x0D, 0x0A, 0
+msg_saved db 0x0D, 0x0A, 'Text Saved!', 0x0D, 0x0A, 0
+msg_deleted db 0x0D, 0x0A, 'File Deleted!', 0x0D, 0x0A, 0
 msg_notfound db 0x0D, 0x0A, 'File not found!', 0x0D, 0x0A, 0
 msg_press db 0x0D, 0x0A, 'Press any key...', 0x0D, 0x0A, 0
 prompt_name db 'Enter name: ', 0
