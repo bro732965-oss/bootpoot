@@ -223,26 +223,41 @@ act_write:
     mov cx, 0
     mov dx, 0x184F
     int 0x10
-    mov si, txt_write
+    mov si, prompt_name
     call print_string
     
-    mov di, buffer
+    mov di, search_buffer
     call read_string
     
-    mov ax, [cursor_pos]
-    add ax, 11
+    call find_file
+    jc .not_found
+    
+    mov ax, bx
+    mov bx, 256
+    mul bx
+    mov di, ax
+    add di, 0x9000
+    
+    mov si, txt_write
+    call print_string
+    call read_text_save
     
     mov ah, 0x03
     mov al, 1
     mov ch, 0
-    mov cl, al
+    mov cl, [file_sector]
     mov dh, 0
     mov dl, 0x00
-    mov bx, buffer
+    mov bx, 0x9000
     int 0x13
-    
+
     mov si, msg_saved
     call print_string
+    jmp .end
+.not_found:
+    mov si, msg_notfound
+    call print_string
+.end:
     mov ah, 0x00
     int 0x16
     jmp main_loop
@@ -253,31 +268,194 @@ act_read:
     mov cx, 0
     mov dx, 0x184F
     int 0x10
+    mov si, prompt_name
+    call print_string
     
-    mov ax, [cursor_pos]
-    add ax, 11
+    mov di, search_buffer
+    call read_string
     
-    mov ah, 0x02
-    mov al, 1
-    mov ch, 0
-    mov cl, al
-    mov dh, 0
-    mov dl, 0x00
-    mov bx, buffer
-    int 0x13
+    call find_file
+    jc .not_found
+    
+    mov ax, bx
+    mov bx, 256
+    mul bx
+    mov si, ax
+    add si, 0x9000
     
     mov si, txt_read
     call print_string
-    mov si, buffer
+    mov si, ax
+    add si, 0x9000
     call print_string
-    
+    jmp .end
+.not_found:
+    mov si, msg_notfound
+    call print_string
+.end:
+    mov si, msg_press
+    call print_string
     mov ah, 0x00
     int 0x16
     jmp main_loop
 
+find_file:
+    mov cx, [file_count]
+    mov bx, file_table + 2
+    cmp cx, 0
+    je .not_found
+.search:
+    push cx
+    push bx
+    push si
+    push di
+    mov si, bx
+    mov di, search_buffer
+    mov cx, 32
+    repe cmpsb
+    pop di
+    pop si
+    pop bx
+    pop cx
+    je .found
+    add bx, 32
+    loop .search
+.not_found:
+    stc
+    ret
+.found:
+    mov bx, [file_count]
+    sub bx, cx
+    mov [file_index], bx
+    
+    ; Вычисляем сектор на диске (11 + индекс файла)
+    add bx, 11
+    mov [file_sector], bl
+    
+    clc
+    ret
+
+read_string:
+    xor cx, cx
+.loop:
+    mov ah, 0x00
+    int 0x16
+    cmp al, 0x0D
+    je .done
+    cmp al, 0x08
+    je .backspace
+    mov ah, 0x0E
+    int 0x10
+    mov [di], al
+    inc di
+    inc cx
+    jmp .loop
+.backspace:
+    cmp cx, 0
+    je .loop
+    dec di
+    dec cx
+    mov al, 0x08
+    mov ah, 0x0E
+    int 0x10
+    mov al, ' '
+    int 0x10
+    mov al, 0x08
+    int 0x10
+    jmp .loop
+.done:
+    mov byte [di], 0
+    ret
+
+read_text_save:
+    xor cx, cx
+    mov byte [enter_count], 0
+.loop:
+    mov ah, 0x00
+    int 0x16
+    cmp al, 0x0D
+    je .enter
+    cmp al, 0x08
+    je .backspace
+    mov ah, 0x0E
+    int 0x10
+    mov [di], al
+    inc di
+    inc cx
+    jmp .loop
+.backspace:
+    cmp cx, 0
+    je .loop
+    dec di
+    dec cx
+    mov al, 0x08
+    mov ah, 0x0E
+    int 0x10
+    mov al, ' '
+    int 0x10
+    mov al, 0x08
+    int 0x10
+    jmp .loop
+.enter:
+    mov al, 0x0D
+    mov ah, 0x0E
+    int 0x10
+    mov al, 0x0A
+    int 0x10
+    mov byte [di], 0x0D
+    inc di
+    mov byte [di], 0x0A
+    inc di
+    inc byte [enter_count]
+    cmp byte [enter_count], 4
+    je .done
+    jmp .loop
+.done:
+    mov byte [di], 0
+    ret
+
 act_delete:
-    mov si, txt_delete
+    mov ax, 0x0600
+    mov bh, 0x07
+    mov cx, 0
+    mov dx, 0x184F
+    int 0x10
+    mov si, prompt_name
     call print_string
+    
+    mov di, search_buffer
+    call read_string
+    
+    call find_file
+    jc .not_found
+    
+    mov ax, [file_index]
+    mov bx, 32
+    mul bx
+    mov di, file_table + 2
+    add di, ax
+    mov byte [di], 0
+    
+    dec word [file_count]
+    mov ax, [file_count]
+    mov [file_table], ax
+    
+    mov ah, 0x03
+    mov al, 1
+    mov ch, 0
+    mov cl, 10
+    mov dh, 0
+    mov dl, 0x00
+    mov bx, file_table
+    int 0x13
+    
+    mov si, msg_deleted
+    call print_string
+    jmp .end
+.not_found:
+    mov si, msg_notfound
+    call print_string
+.end:
     mov ah, 0x00
     int 0x16
     jmp main_loop
@@ -323,38 +501,6 @@ shutdown:
     hlt
     jmp .halt
 
-read_string:
-    xor cx, cx
-.loop:
-    mov ah, 0x00
-    int 0x16
-    cmp al, 0x0D
-    je .done
-    cmp al, 0x08
-    je .backspace
-    mov ah, 0x0E
-    int 0x10
-    mov [di], al
-    inc di
-    inc cx
-    jmp .loop
-.backspace:
-    cmp cx, 0
-    je .loop
-    dec di
-    dec cx
-    mov al, 0x08
-    mov ah, 0x0E
-    int 0x10
-    mov al, ' '
-    int 0x10
-    mov al, 0x08
-    int 0x10
-    jmp .loop
-.done:
-    mov byte [di], 0
-    ret
-
 set_cursor:
     mov ah, 0x02
     xor bh, bh
@@ -373,7 +519,10 @@ print_string:
 
 file_count dw 0
 cursor_pos dw 0
-buffer times 512 db 0
+enter_count db 0
+file_index dw 0
+file_sector db 0
+search_buffer db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 file_table:
     dw 0
@@ -390,7 +539,7 @@ m5 db '5. Console (16-bit)', 0
 m6 db '6. Shutdown PC', 0
 m7 db 'Esc - Back', 0
 txt_read db 'File content: ', 0x0D, 0x0A, 0
-txt_write db 'Enter text (Press Enter to save): ', 0
+txt_write db 'Enter text (4x Enter to save): ', 0
 txt_create db 'Enter name (Press Enter): ', 0
 txt_delete db 'Deleting file... (Press any key)', 0x0D, 0x0A, 0
 txt_console db 'Loading console.img...', 0x0D, 0x0A, 0
@@ -398,4 +547,8 @@ txt_error db 'Disk read error!', 0x0D, 0x0A, 0
 shut_msg db 0x0D, 0x0A, 'Shutting down...', 0x0D, 0x0A, 0
 msg_created db 0x0D, 0x0A, 'File Created! (Saved to disk)', 0x0D, 0x0A, 0
 msg_saved db 0x0D, 0x0A, 'Text Saved! (Press any key)', 0x0D, 0x0A, 0
+msg_deleted db 0x0D, 0x0A, 'File Deleted! (Press any key)', 0x0D, 0x0A, 0
+msg_notfound db 0x0D, 0x0A, 'File not found!', 0x0D, 0x0A, 0
+msg_press db 0x0D, 0x0A, 'Press any key...', 0x0D, 0x0A, 0
+prompt_name db 'Enter name: ', 0
 nl db 0x0D, 0x0A, 0
