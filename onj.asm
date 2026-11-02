@@ -232,6 +232,11 @@ act_write:
     call find_file
     jc .not_found
     
+    ; Вычисляем сектор для записи текста (11 + индекс файла)
+    mov ax, bx
+    add ax, 11
+    mov [file_sector], al
+    
     mov ax, bx
     mov bx, 256
     mul bx
@@ -242,6 +247,7 @@ act_write:
     call print_string
     call read_text_save
     
+    ; ЗАПИСЫВАЕМ ТЕКСТ НА ДИСКЕТУ
     mov ah, 0x03
     mov al, 1
     mov ch, 0
@@ -250,7 +256,7 @@ act_write:
     mov dl, 0x00
     mov bx, 0x9000
     int 0x13
-
+    
     mov si, msg_saved
     call print_string
     jmp .end
@@ -277,16 +283,24 @@ act_read:
     call find_file
     jc .not_found
     
+    ; Вычисляем сектор для чтения (11 + индекс файла)
     mov ax, bx
-    mov bx, 256
-    mul bx
-    mov si, ax
-    add si, 0x9000
+    add ax, 11
+    mov [file_sector], al
+    
+    ; ЧИТАЕМ ТЕКСТ С ДИСКЕТЫ
+    mov ah, 0x02
+    mov al, 1
+    mov ch, 0
+    mov cl, [file_sector]
+    mov dh, 0
+    mov dl, 0x00
+    mov bx, 0x9000
+    int 0x13
     
     mov si, txt_read
     call print_string
-    mov si, ax
-    add si, 0x9000
+    mov si, 0x9000
     call print_string
     jmp .end
 .not_found:
@@ -326,12 +340,6 @@ find_file:
 .found:
     mov bx, [file_count]
     sub bx, cx
-    mov [file_index], bx
-    
-    ; Вычисляем сектор на диске (11 + индекс файла)
-    add bx, 11
-    mov [file_sector], bl
-    
     clc
     ret
 
@@ -369,12 +377,11 @@ read_string:
 
 read_text_save:
     xor cx, cx
-    mov byte [enter_count], 0
 .loop:
     mov ah, 0x00
     int 0x16
     cmp al, 0x0D
-    je .enter
+    je .done
     cmp al, 0x08
     je .backspace
     mov ah, 0x0E
@@ -396,20 +403,6 @@ read_text_save:
     mov al, 0x08
     int 0x10
     jmp .loop
-.enter:
-    mov al, 0x0D
-    mov ah, 0x0E
-    int 0x10
-    mov al, 0x0A
-    int 0x10
-    mov byte [di], 0x0D
-    inc di
-    mov byte [di], 0x0A
-    inc di
-    inc byte [enter_count]
-    cmp byte [enter_count], 4
-    je .done
-    jmp .loop
 .done:
     mov byte [di], 0
     ret
@@ -429,7 +422,8 @@ act_delete:
     call find_file
     jc .not_found
     
-    mov ax, [file_index]
+    mov ax, [file_count]
+    dec ax
     mov bx, 32
     mul bx
     mov di, file_table + 2
@@ -519,8 +513,6 @@ print_string:
 
 file_count dw 0
 cursor_pos dw 0
-enter_count db 0
-file_index dw 0
 file_sector db 0
 search_buffer db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
@@ -538,9 +530,9 @@ m4 db '4. Delete File', 0
 m5 db '5. Console (16-bit)', 0
 m6 db '6. Shutdown PC', 0
 m7 db 'Esc - Back', 0
-txt_read db 'File content: ', 0x0D, 0x0A, 0
-txt_write db 'Enter text (4x Enter to save): ', 0
-txt_create db 'Enter name (Press Enter): ', 0
+txt_read db 'Content: ', 0x0D, 0x0A, 0
+txt_write db 'Enter text (Enter to save): ', 0
+txt_create db 'Enter name (Enter to save): ', 0
 txt_delete db 'Deleting file... (Press any key)', 0x0D, 0x0A, 0
 txt_console db 'Loading console.img...', 0x0D, 0x0A, 0
 txt_error db 'Disk read error!', 0x0D, 0x0A, 0
