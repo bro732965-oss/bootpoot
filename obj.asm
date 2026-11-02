@@ -174,13 +174,13 @@ write_file:
     
     call find_file
     jc .not_found
-    
+
     mov ax, bx
     mov bx, 256
     mul bx
     mov di, ax
     add di, 0x9000
-    
+
     mov si, prompt_write
     call print_string
     call read_text
@@ -201,21 +201,7 @@ write_file:
     je .found_end
     inc di
     jmp .find_end
-.found_end:
-    
-    mov si, prompt_update
-    call print_string
-    call read_text
-    mov si, msg_saved
-    call print_string
-    jmp .end
-.not_found:
-    mov si, msg_notfound
-    call print_string
-.end:
-    mov ah, 0x00
-    int 0x16
-    jmp draw_screen
+
 
 read_file:
     mov ax, 0x0600
