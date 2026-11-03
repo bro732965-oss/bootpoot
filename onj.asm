@@ -423,7 +423,7 @@ act_console:
     mov ah, 0x02
     mov al, 2
     mov ch, 0
-    mov cl, 20
+    mov cl, 100
     mov dh, 0
     mov dl, 0
     int 0x13
