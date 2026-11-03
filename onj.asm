@@ -232,7 +232,6 @@ act_write:
     call find_file
     jc .not_found
     
-    ; Вычисляем сектор (11 + номер файла)
     mov ax, bx
     add ax, 11
     mov [file_sector], al
@@ -278,7 +277,6 @@ act_read:
     call find_file
     jc .not_found
     
-    ; Вычисляем сектор (11 + номер файла)
     mov ax, bx
     add ax, 11
     mov [file_sector], al
@@ -419,18 +417,18 @@ act_delete:
 act_console:
     mov si, txt_console
     call print_string
-    mov ax, 0x8000
+    mov ax, 0x1000
     mov es, ax
     xor bx, bx
     mov ah, 0x02
-    mov al, 64
+    mov al, 2
     mov ch, 0
     mov cl, 20
     mov dh, 0
     mov dl, 0
     int 0x13
     jc .err
-    jmp 0x8000:0x0000
+    jmp 0x1000:0x0000
 .err:
     mov si, txt_error
     call print_string
